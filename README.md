@@ -69,3 +69,8 @@ The interface follows the Apple Human Interface Guidelines and the Liquid Glass 
 swift Scripts/make_icon.swift
 iconutil -c icns build/icon.iconset -o Resources/AppIcon.icns
 ```
+
+## License
+
+[MIT](LICENSE)
+

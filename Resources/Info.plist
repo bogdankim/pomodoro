@@ -27,6 +27,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Bogdan Kim. All rights reserved.</string>
+	<string>Copyright © 2026 Bogdan Kim. Released under the MIT License.</string>
 </dict>
 </plist>
