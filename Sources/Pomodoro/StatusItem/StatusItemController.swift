@@ -13,6 +13,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let model: AppModel
     private let settings: SettingsStore
+    private var anchorView: NSView?
 
     init(model: AppModel, settings: SettingsStore, content: PopoverContent) {
         self.model = model
@@ -54,13 +55,24 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     func showPopover(focusQuickAdd: Bool) {
-        guard let button = statusItem.button else { return }
+        guard let button = statusItem.button, let statusBar = button.superview else { return }
+
+        // Anchor to a fixed snapshot of the button's frame rather than the
+        // button itself: the icon changes width while the popover is open
+        // (timer symbol when idle, ring and time when running), and a popover
+        // anchored to the button would be dragged along with it.
+        if anchorView == nil {
+            anchorView = NSView(frame: button.frame)
+            statusBar.addSubview(anchorView!)
+        }
+        anchorView?.frame = button.frame
+
         if focusQuickAdd {
             // The user asked for the panel from a global shortcut, so taking
             // key focus is expected; without it the popover cannot accept typing.
             NSApp.activate(ignoringOtherApps: true)
         }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.show(relativeTo: anchorView!.bounds, of: anchorView!, preferredEdge: .minY)
         if focusQuickAdd {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 NotificationCenter.default.post(name: .focusQuickAddField, object: nil)
