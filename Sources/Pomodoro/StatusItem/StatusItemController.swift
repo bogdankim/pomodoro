@@ -13,7 +13,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let model: AppModel
     private let settings: SettingsStore
-    private var anchorView: NSView?
+    private var anchorWindow: NSWindow?
+    private var lastPopoverCloseDate: Date?
 
     init(model: AppModel, settings: SettingsStore, content: PopoverContent) {
         self.model = model
@@ -49,30 +50,53 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func togglePopover(focusQuickAdd: Bool = false) {
         if popover.isShown {
             popover.performClose(nil)
+        } else if let lastPopoverCloseDate,
+                  Date().timeIntervalSince(lastPopoverCloseDate) < 0.25 {
+            // The system just dismissed the transient popover (a click outside,
+            // including on the status item itself); don't immediately reopen.
+            return
         } else {
             showPopover(focusQuickAdd: focusQuickAdd)
         }
     }
 
     func showPopover(focusQuickAdd: Bool) {
-        guard let button = statusItem.button, let statusBar = button.superview else { return }
+        guard let button = statusItem.button, let buttonWindow = button.window else { return }
 
-        // Anchor to a fixed snapshot of the button's frame rather than the
-        // button itself: the icon changes width while the popover is open
-        // (timer symbol when idle, ring and time when running), and a popover
-        // anchored to the button would be dragged along with it.
-        if anchorView == nil {
-            anchorView = NSView(frame: button.frame)
-            statusBar.addSubview(anchorView!)
+        // Anchor to a dedicated, fixed-size transparent window pinned over the
+        // status item. The status item's own window resizes whenever the icon
+        // changes (timer symbol when idle, ring and time when running), and an
+        // NSPopover anchored inside it gets dragged along with every resize.
+        // The anchor window never resizes while the popover is open, so the
+        // panel stays put; it is re-pinned to the icon on each show.
+        if anchorWindow == nil {
+            let anchor = NSWindow(
+                contentRect: buttonWindow.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            anchor.isOpaque = false
+            anchor.backgroundColor = .clear
+            anchor.level = .statusBar
+            anchor.ignoresMouseEvents = true
+            anchor.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            anchor.isReleasedWhenClosed = false
+            anchor.contentView = NSView(frame: NSRect(origin: .zero, size: buttonWindow.frame.size))
+            anchor.orderFrontRegardless()
+            anchorWindow = anchor
         }
-        anchorView?.frame = button.frame
+        anchorWindow?.setFrameOrigin(buttonWindow.frame.origin)
+        anchorWindow?.setContentSize(buttonWindow.frame.size)
 
         if focusQuickAdd {
             // The user asked for the panel from a global shortcut, so taking
             // key focus is expected; without it the popover cannot accept typing.
             NSApp.activate(ignoringOtherApps: true)
         }
-        popover.show(relativeTo: anchorView!.bounds, of: anchorView!, preferredEdge: .minY)
+        if let anchorView = anchorWindow?.contentView {
+            popover.show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
+        }
         if focusQuickAdd {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 NotificationCenter.default.post(name: .focusQuickAddField, object: nil)
@@ -80,7 +104,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
     }
 
-    func popoverDidClose(_ notification: Notification) {}
+    func popoverDidClose(_ notification: Notification) {
+        lastPopoverCloseDate = Date()
+    }
 
     // MARK: - Icon
 
