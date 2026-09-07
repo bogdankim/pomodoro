@@ -13,7 +13,13 @@ During a focus session the ring starts full and drains; breaks fill it back up. 
 - macOS 26 or later to run
 - Command Line Tools with the macOS 26.1 SDK (or full Xcode) to build
 
-## Build and run
+## Install a prebuilt copy
+
+Download the latest zip from [Releases](https://github.com/bogdankim/pomodoro/releases), unzip it, and move `Pomodoro.app` into `/Applications`. The builds are ad-hoc signed and not notarized, so the first launch needs a right-click and Open, or `xattr -cr /Applications/Pomodoro.app` in Terminal. Requires macOS 26 or later.
+
+Pushing a tag like `v1.2.0` builds the app, runs the checks, and publishes a release automatically.
+
+## Build from source
 
 ```sh
 ./Scripts/make_app.sh release
