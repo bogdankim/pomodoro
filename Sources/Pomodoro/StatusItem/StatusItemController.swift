@@ -47,7 +47,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         togglePopover()
     }
 
-    func togglePopover(focusQuickAdd: Bool = false) {
+    func togglePopover(focusQuickAdd: Bool = true) {
         if popover.isShown {
             popover.performClose(nil)
         } else if let lastPopoverCloseDate,
