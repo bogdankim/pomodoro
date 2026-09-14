@@ -18,17 +18,15 @@ extension Notification.Name {
     static let popoverNaturalHeightChanged = Notification.Name("Pomodoro.popoverNaturalHeightChanged")
 }
 
-/// Blurs, fades, and lifts slightly; used when a completed task leaves the list.
+/// Blurs and fades; used when a completed task leaves the list.
 struct BlurOutModifier: ViewModifier {
     let radius: CGFloat
     let opacity: Double
-    let offsetY: CGFloat
 
     func body(content: Content) -> some View {
         content
             .blur(radius: radius)
             .opacity(opacity)
-            .offset(y: offsetY)
     }
 }
 
@@ -37,8 +35,8 @@ extension AnyTransition {
         AnyTransition.asymmetric(
             insertion: .opacity,
             removal: .modifier(
-                active: BlurOutModifier(radius: 5, opacity: 0, offsetY: -3),
-                identity: BlurOutModifier(radius: 0, opacity: 1, offsetY: 0)
+                active: BlurOutModifier(radius: 5, opacity: 0),
+                identity: BlurOutModifier(radius: 0, opacity: 1)
             )
         )
     }
