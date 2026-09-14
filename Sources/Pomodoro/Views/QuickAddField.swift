@@ -136,9 +136,9 @@ struct QuickAddField: View {
     }
 
     /// Shift-Tab is swallowed by AppKit's key view loop before SwiftUI's
-    /// key handlers see it, so mode toggling needs an event monitor that
-    /// runs while the field is focused. The focus state is read live through
-    /// its property wrapper — a capture list would freeze it at creation.
+    /// key handlers see it, so mode toggling goes through an event monitor
+    /// that runs while the field is focused. The monitor reads focus state
+    /// live through its property wrapper on every key press.
     private func installMonitor() {
         let monitor = CaptureModeKeyMonitor(
             shouldIntercept: { fieldFocused },

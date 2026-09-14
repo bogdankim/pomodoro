@@ -32,8 +32,8 @@ struct TaskListSection: View {
 
     @ViewBuilder
     private var listContent: some View {
-        // Mutations animate via withAnimation(.listChange) at the model, so
-        // no container-level .animation(value:) is needed here.
+        // Rows animate when the models mutate: TaskListModel and NoteListModel
+        // wrap every change in withAnimation(.listChange).
         let combined = tasks.visibleTasks.map(AnyListItem.task) + notes.visibleNotes.map(AnyListItem.note)
         if combined.count <= maxVisibleRows {
             VStack(spacing: 2) {

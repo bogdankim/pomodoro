@@ -13,6 +13,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let model: AppModel
     private let settings: SettingsStore
+    private var hosting: NSHostingController<PopoverContent>!
     private var anchorWindow: NSWindow?
     private var lastPopoverCloseDate: Date?
 
@@ -23,7 +24,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         super.init()
 
         let hosting = NSHostingController(rootView: content)
-        hosting.sizingOptions = .preferredContentSize
+        // The popover's size is owned by this controller, not by SwiftUI:
+        // preferredContentSize would make NSPopover snap the window to a new
+        // height in a single frame whenever the list changes.
+        hosting.sizingOptions = []
+        self.hosting = hosting
         popover.contentViewController = hosting
         popover.behavior = .transient
         popover.delegate = self
@@ -51,7 +56,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else if let lastPopoverCloseDate,
-                  Date().timeIntervalSince(lastPopoverCloseDate) < 0.25 {
+            Date().timeIntervalSince(lastPopoverCloseDate) < 0.25
+        {
             // The system just dismissed the transient popover (a click outside,
             // including on the status item itself); don't immediately reopen.
             return
@@ -94,9 +100,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             // key focus is expected; without it the popover cannot accept typing.
             NSApp.activate(ignoringOtherApps: true)
         }
+        measureAndSizePopover()
         if let anchorView = anchorWindow?.contentView {
             popover.show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
         }
+        observePopoverNaturalHeight()
         if focusQuickAdd {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 NotificationCenter.default.post(name: .focusQuickAddField, object: nil)
@@ -106,6 +114,75 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         lastPopoverCloseDate = Date()
+        heightNotificationObserver = nil
+    }
+
+    // MARK: - Animated popover resizing
+
+    /// NSPopover sizes its window from the content view controller's
+    /// `preferredContentSize`. The content reports its natural height
+    /// (`fixedSize` layout, unaffected by the window's current frame), and
+    /// this controller steps `preferredContentSize` toward it along a 0.2s
+    /// cubic ease-out — the same curve the list rows animate with — so
+    /// NSPopover's resizes blend into one glide. The top edge stays pinned
+    /// under the status item, so header and footer never move.
+
+    private var heightNotificationObserver: NSObjectProtocol?
+    private var heightAnimator: Timer?
+
+    private func observePopoverNaturalHeight() {
+        guard heightNotificationObserver == nil else { return }
+        heightNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .popoverNaturalHeightChanged, object: nil, queue: .main
+        ) { [weak self] notification in
+            let naturalHeight = notification.userInfo?["height"] as? CGFloat ?? 0
+            MainActor.assumeIsolated {
+                guard let self, naturalHeight > 0 else { return }
+                self.animatePreferredContentSize(to: naturalHeight)
+            }
+        }
+    }
+
+    /// Steps preferredContentSize along a cubic ease-out over 0.2s, matching
+    /// the list rows' animation.
+    private func animatePreferredContentSize(to target: CGFloat) {
+        heightAnimator?.invalidate()
+        heightAnimator = nil
+        let start = hosting.preferredContentSize.height
+        guard abs(target - start) > 0.5 else { return }
+
+        let duration = 0.2
+        let tickInterval = 1.0 / 120.0
+        var elapsed: TimeInterval = 0
+        let timer = Timer(timeInterval: tickInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                elapsed += tickInterval
+                let progress = min(elapsed / duration, 1)
+                let eased = 1 - pow(1 - progress, 3)
+                let height = start + (target - start) * eased
+                self.hosting.preferredContentSize = NSSize(width: 300, height: height)
+                if progress >= 1 {
+                    self.heightAnimator?.invalidate()
+                    self.heightAnimator = nil
+                    self.hosting.preferredContentSize = NSSize(width: 300, height: target)
+                }
+            }
+        }
+        heightAnimator = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// Sizes the popover to the content's natural height. Called on every
+    /// open, before `popover.show`.
+    private func measureAndSizePopover() {
+        let root = hosting.view
+        root.layoutSubtreeIfNeeded()
+        let natural = root.fittingSize.height
+        guard natural > 0 else { return }
+        heightAnimator?.invalidate()
+        heightAnimator = nil
+        hosting.preferredContentSize = NSSize(width: 300, height: natural)
     }
 
     // MARK: - Icon
