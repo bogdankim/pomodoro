@@ -102,18 +102,17 @@ struct NoteRow: View {
 
             Spacer(minLength: 8)
 
-            if hovering {
-                Button {
-                    notes.remove(note.id)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Delete note")
-                .transition(.opacity)
+            Button {
+                notes.remove(note.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
             }
+            .buttonStyle(.plain)
+            .help("Delete note")
+            // Always laid out so the text width never shifts; visible on hover.
+            .opacity(hovering ? 1 : 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 5)
@@ -165,18 +164,18 @@ struct TaskRow: View {
 
             Spacer(minLength: 8)
 
-            if hovering && !task.isDone {
-                Button {
-                    tasks.remove(task.id)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Delete task")
-                .transition(.opacity)
+            Button {
+                tasks.remove(task.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
             }
+            .buttonStyle(.plain)
+            .help("Delete task")
+            // Always laid out so the text width never shifts; visible on hover.
+            .opacity(hovering && !task.isDone ? 1 : 0)
+            .allowsHitTesting(hovering && !task.isDone)
 
             Circle()
                 .fill(task.priority.tint)
