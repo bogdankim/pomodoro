@@ -2,32 +2,84 @@ import PomodoroCore
 import SwiftUI
 
 /// The popover shown when the menu bar item is clicked: timer, controls, and
-/// the task list. The system supplies the Liquid Glass panel background; this
-/// content adds no material of its own.
+/// the capture area with the task and note list. The system supplies the
+/// Liquid Glass panel background; this content adds no material of its own.
+///
+/// The content is always laid out at its natural height (`fixedSize`), never
+/// squeezed by the window; it reports that height to AppKit, which animates
+/// the popover window to match. The header is height-locked after first
+/// layout so list changes reflow only the list.
 struct PopoverContent: View {
     let model: AppModel
     let tasks: TaskListModel
+    let notes: NoteListModel
     let settings: SettingsStore
 
     var body: some View {
+        content
+            // One tree, never squeezed: fixedSize pins the content to its
+            // natural height regardless of the window's current (animated)
+            // frame, so layout is stable and nothing is clipped mid-glide.
+            // The height it reports drives the window animation in AppKit.
+            .fixedSize(horizontal: false, vertical: true)
+            .clipped()
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                guard height > 0 else { return }
+                NotificationCenter.default.post(
+                    name: .popoverNaturalHeightChanged,
+                    object: nil,
+                    userInfo: ["height": height])
+            }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
-            TimerSection(model: model, settings: settings)
-            ControlsRow(model: model)
-
-            Divider()
-                .padding(.vertical, 12)
-
-            QuickAddField(tasks: tasks)
-                .padding(.bottom, 8)
-
-            TaskListSection(tasks: tasks)
-
-            Divider()
-                .padding(.top, 12)
-
+            header
+                .frame(height: headerHeight)
+            CaptureAndListSection(tasks: tasks, notes: notes)
             FooterBar(model: model, tasks: tasks)
         }
         .frame(width: 300)
+    }
+
+    /// Fixed-height top block: timer, controls, first divider. The height is
+    /// measured once on first layout and then locked — list changes can never
+    /// reflow it, in either direction.
+    private var header: some View {
+        VStack(spacing: 0) {
+            TimerSection(model: model, settings: settings)
+            ControlsRow(model: model)
+            Divider()
+        }
+        .padding(.bottom, 12)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+            if headerHeight == nil, height > 0 {
+                headerHeight = height
+            }
+        }
+    }
+
+    @State private var headerHeight: CGFloat?
+}
+
+// MARK: - Capture and list
+
+/// Quick-add row, list, and the divider above the footer. The only part of
+/// the popover whose height ever changes, so it's the part we measure.
+private struct CaptureAndListSection: View {
+    let tasks: TaskListModel
+    let notes: NoteListModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            QuickAddField(tasks: tasks, notes: notes)
+                .padding(.bottom, 8)
+
+            TaskListSection(tasks: tasks, notes: notes)
+
+            Divider()
+                .padding(.top, 12)
+        }
     }
 }
 
@@ -209,6 +261,9 @@ private struct FooterBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        // Never compress vertically: mid-animation window heights would
+        // otherwise re-wrap the hint (one line <-> two) while resizing.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var footerText: String {

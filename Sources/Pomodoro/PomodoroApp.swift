@@ -17,22 +17,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let settings = SettingsStore()
     let tasks = TaskListModel()
+    let notes = NoteListModel()
 
     private(set) lazy var model = AppModel(settings: settings, tasks: tasks)
 
     private(set) lazy var statusItem = StatusItemController(
         model: model,
         settings: settings,
-        content: PopoverContent(model: model, tasks: tasks, settings: settings)
+        content: PopoverContent(model: model, tasks: tasks, notes: notes, settings: settings)
     )
 
     private(set) lazy var quickAddPanel: FloatingPanelController<QuickAddPanelView> = FloatingPanelController(
         minimumWidth: 520
     ) {
         QuickAddPanelView(
-            onCommit: { [weak self] title, priority in
+            onCommit: { [weak self] title, priority, mode in
                 guard let self else { return }
-                tasks.add(title: title, priority: priority)
+                switch mode {
+                case .task:
+                    tasks.add(title: title, priority: priority)
+                case .note:
+                    notes.add(text: title)
+                }
                 quickAddPanel.hide()
             },
             onCancel: { [weak self] in

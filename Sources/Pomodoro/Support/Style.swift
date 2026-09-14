@@ -12,6 +12,10 @@ enum SoundPlayer {
 extension Notification.Name {
     /// Posted when the popover should focus its quick-add field.
     static let focusQuickAddField = Notification.Name("Pomodoro.focusQuickAddField")
+
+    /// Posted with the popover content's natural (unconstrained) total height,
+    /// so the status item controller can animate the window to match.
+    static let popoverNaturalHeightChanged = Notification.Name("Pomodoro.popoverNaturalHeightChanged")
 }
 
 /// Blurs, fades, and lifts slightly; used when a completed task leaves the list.
@@ -33,7 +37,7 @@ extension AnyTransition {
         AnyTransition.asymmetric(
             insertion: .opacity,
             removal: .modifier(
-                active: BlurOutModifier(radius: 8, opacity: 0, offsetY: -4),
+                active: BlurOutModifier(radius: 5, opacity: 0, offsetY: -3),
                 identity: BlurOutModifier(radius: 0, opacity: 1, offsetY: 0)
             )
         )

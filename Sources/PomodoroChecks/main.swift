@@ -165,6 +165,27 @@ func runTaskChecks() {
     expect(TaskItem.Priority.medium > .low, true, "medium above low")
 }
 
+func runNoteChecks() {
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+    func makeNote(_ text: String, createdAt: Date) -> NoteItem {
+        NoteItem(text: text, createdAt: createdAt)
+    }
+
+    // Visible notes are newest first, capped to the limit.
+    let n1 = makeNote("oldest", createdAt: t0)
+    let n2 = makeNote("middle", createdAt: t0.addingTimeInterval(10))
+    let n3 = makeNote("newest", createdAt: t0.addingTimeInterval(20))
+    expect(
+        NoteListLogic.visible([n1, n2, n3], limit: 2).map(\.text),
+        ["newest", "middle"], "visible notes newest first, capped")
+
+    // Ordering is stable regardless of input order.
+    expect(
+        NoteListLogic.sorted([n3, n1, n2]).map(\.text),
+        ["newest", "middle", "oldest"], "note sort")
+}
+
 func runFormattingChecks() {
     expect(TimeFormatting.clock(0), "00:00", "zero")
     expect(TimeFormatting.clock(1500), "25:00", "25 minutes")
@@ -177,6 +198,7 @@ func runFormattingChecks() {
 
 runEngineChecks()
 runTaskChecks()
+runNoteChecks()
 runFormattingChecks()
 
 if failures == 0 {

@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 import PomodoroCore
+import SwiftUI
+
+/// The animation shared by all task-list changes: firm, no spring tail.
+extension Animation {
+    static let listChange = Animation.easeOut(duration: 0.2)
+}
 
 /// Observable task store with JSON persistence and a five-second grace window
 /// after completion: the row stays visible (struck through, muted) and can be
@@ -43,20 +49,26 @@ final class TaskListModel {
     func add(title: String, priority: TaskItem.Priority) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        tasks.append(TaskItem(title: trimmed, priority: priority))
+        withAnimation(.listChange) {
+            tasks.append(TaskItem(title: trimmed, priority: priority))
+        }
         save()
     }
 
     func toggleDone(_ id: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.listChange) {
+            if tasks[index].isDone {
+                tasks[index].isDone = false
+                tasks[index].doneAt = nil
+                graceTasks[id]?.cancel()
+                graceTasks[id] = nil
+            } else {
+                tasks[index].isDone = true
+                tasks[index].doneAt = Date()
+            }
+        }
         if tasks[index].isDone {
-            tasks[index].isDone = false
-            tasks[index].doneAt = nil
-            graceTasks[id]?.cancel()
-            graceTasks[id] = nil
-        } else {
-            tasks[index].isDone = true
-            tasks[index].doneAt = Date()
             scheduleGraceRemoval(for: id)
         }
         save()
@@ -69,7 +81,9 @@ final class TaskListModel {
     }
 
     func remove(_ id: UUID) {
-        tasks.removeAll { $0.id == id }
+        withAnimation(.listChange) {
+            tasks.removeAll { $0.id == id }
+        }
         graceTasks[id]?.cancel()
         graceTasks[id] = nil
         save()
@@ -87,7 +101,9 @@ final class TaskListModel {
 
     private func graceExpired(for id: UUID) {
         graceTasks[id] = nil
-        graceTick += 1
+        withAnimation(.listChange) {
+            graceTick += 1
+        }
     }
 
     // MARK: - Persistence
