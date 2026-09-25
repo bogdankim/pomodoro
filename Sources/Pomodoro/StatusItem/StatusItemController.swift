@@ -46,6 +46,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.isShown
     }
 
+    /// Shows or hides the status item entirely. When hidden, the popover is
+    /// dismissed first; global shortcuts remain functional and are the way
+    /// back in (the capture panel's hint points to Settings).
+    func setVisible(_ visible: Bool) {
+        guard statusItem.isVisible != visible else { return }
+        if !visible, popover.isShown {
+            popover.performClose(nil)
+        }
+        statusItem.isVisible = visible
+    }
+
     // MARK: - Popover
 
     @objc private func statusItemClicked() {

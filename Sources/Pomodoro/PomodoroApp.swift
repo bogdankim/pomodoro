@@ -67,8 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private(set) lazy var hotKey = GlobalHotKey(
-        keyCode: UInt32(kVK_ANSI_P),
-        modifiers: UInt32(cmdKey | shiftKey)
+        keyCode: settings.quickAddShortcut.keyCode,
+        modifiers: settings.quickAddShortcut.modifiers
     ) { [weak self] in
         self?.quickAdd()
     }
@@ -80,7 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .floatingPanel:
             quickAddPanel.toggle()
         case .menuBarPanel:
-            statusItem.togglePopover(focusQuickAdd: true)
+            if settings.showInMenuBar {
+                statusItem.togglePopover(focusQuickAdd: true)
+            } else {
+                // The status item is hidden; the capture panel is the only
+                // reachable surface, so open that.
+                quickAddPanel.show()
+            }
         }
     }
 
@@ -100,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             statusItem.refreshIcon()
             model.refreshCountdownDisplay()
+            hotKey?.update(settings.quickAddShortcut)
+            statusItem.setVisible(settings.showInMenuBar)
         }
     }
 }

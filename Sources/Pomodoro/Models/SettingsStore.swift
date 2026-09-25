@@ -87,6 +87,26 @@ final class SettingsStore {
         }
     }
 
+    /// The global quick-add shortcut, remappable in Settings.
+    var quickAddShortcut: KeyCombo {
+        didSet {
+            if let data = try? JSONEncoder().encode(quickAddShortcut) {
+                defaults.set(data, forKey: "quickAddShortcut")
+            }
+            onChange?()
+        }
+    }
+
+    /// Whether the timer lives in the menu bar at all. When off, the status
+    /// item is removed; global shortcuts keep working so Settings stays
+    /// reachable through the capture panel.
+    var showInMenuBar: Bool {
+        didSet {
+            defaults.set(showInMenuBar, forKey: "showInMenuBar")
+            onChange?()
+        }
+    }
+
     /// Called on every settings change so non-SwiftUI surfaces (the status item)
     /// can re-render.
     var onChange: (() -> Void)?
@@ -127,6 +147,7 @@ final class SettingsStore {
             "soundEnabled": true,
             "iconMode": MenuBarIconMode.combined.rawValue,
             "quickAddOpens": QuickAddTarget.menuBarPanel.rawValue,
+            "showInMenuBar": true,
         ])
         focusMinutes = defaults.integer(forKey: "focusMinutes")
         shortBreakMinutes = defaults.integer(forKey: "shortBreakMinutes")
@@ -138,6 +159,14 @@ final class SettingsStore {
         iconMode = (MenuBarIconMode(rawValue: defaults.string(forKey: "iconMode") ?? "")) ?? .combined
         quickAddOpens =
             (QuickAddTarget(rawValue: defaults.string(forKey: "quickAddOpens") ?? "")) ?? .menuBarPanel
+        if let data = defaults.data(forKey: "quickAddShortcut"),
+            let combo = try? JSONDecoder().decode(KeyCombo.self, from: data)
+        {
+            quickAddShortcut = combo
+        } else {
+            quickAddShortcut = .default
+        }
+        showInMenuBar = defaults.object(forKey: "showInMenuBar") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

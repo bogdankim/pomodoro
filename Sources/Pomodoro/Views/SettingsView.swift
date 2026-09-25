@@ -46,10 +46,25 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.radioGroup)
                 .accessibilityLabel("What the global quick-add shortcut opens")
+                LabeledContent("Shortcut") {
+                    HotKeyRecorder(combo: $settings.quickAddShortcut)
+                }
             } header: {
                 Text("Quick Add")
             } footer: {
-                Text("Add a task from anywhere by pressing ⌘⇧P.")
+                Text(
+                    "Add a task from anywhere by pressing \(settings.quickAddShortcut.displayName). Click the shortcut to remap it."
+                )
+            }
+
+            Section {
+                Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
+            } header: {
+                Text("Menu Bar Visibility")
+            } footer: {
+                Text(
+                    "Hides the timer from the menu bar completely. The shortcut keeps working — it opens the capture panel, which is also where Settings remains reachable."
+                )
             }
 
             Section("General") {

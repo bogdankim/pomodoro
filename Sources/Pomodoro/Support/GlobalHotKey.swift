@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 
 /// Registers a system-wide keyboard shortcut via Carbon's hot key API, which
 /// needs no accessibility permission. The action runs on the main actor.
+/// The combination can be changed at any time with `update(_:registered:)`.
 @MainActor
 final class GlobalHotKey {
 
@@ -12,6 +13,7 @@ final class GlobalHotKey {
 
     private var hotKeyRef: EventHotKeyRef?
     private var registeredID: UInt32 = 0
+    private let action: @MainActor () -> Void
 
     init?(keyCode: UInt32, modifiers: UInt32, action: @escaping @MainActor () -> Void) {
         if !GlobalHotKey.handlerInstalled {
@@ -33,21 +35,37 @@ final class GlobalHotKey {
             GlobalHotKey.handlerInstalled = true
         }
 
+        self.action = action
         let id = GlobalHotKey.nextID
         GlobalHotKey.nextID += 1
-        let hotKeyID = EventHotKeyID(signature: OSType(0x504F_4D44) /* 'POMD' */, id: id)
-        var ref: EventHotKeyRef?
-        let registerStatus = RegisterEventHotKey(
-            keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
-        guard registerStatus == noErr, ref != nil else { return nil }
-
-        hotKeyRef = ref
         registeredID = id
         GlobalHotKey.handlers[id] = action
+        register(keyCode: keyCode, modifiers: modifiers)
     }
 
-    /// The hot key stays registered for the process lifetime; there is no
-    /// unregistration path (deinit cannot touch the non-Sendable ref).
+    /// Swaps the registered combination.
+    func update(_ combo: KeyCombo) {
+        unregister()
+        register(keyCode: combo.keyCode, modifiers: combo.modifiers)
+    }
+
+    private func register(keyCode: UInt32, modifiers: UInt32) {
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x504F_4D44) /* 'POMD' */, id: registeredID)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, ref != nil else { return }
+        hotKeyRef = ref
+    }
+
+    private func unregister() {
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        hotKeyRef = nil
+    }
+
     fileprivate static func fire(id: UInt32) {
         handlers[id]?()
     }
