@@ -8,21 +8,6 @@ enum QuickAddTarget: String, CaseIterable, Codable {
     case menuBarPanel
 }
 
-/// How the status item renders while a phase is active.
-enum MenuBarIconMode: String, CaseIterable, Codable {
-    case progressRing
-    case timer
-    case combined
-
-    var displayName: String {
-        switch self {
-        case .progressRing: "Progress ring"
-        case .timer: "Time"
-        case .combined: "Ring and time"
-        }
-    }
-}
-
 /// App settings backed by UserDefaults. Stored properties write through on change
 /// so every SwiftUI view observing them updates.
 @MainActor
@@ -73,9 +58,24 @@ final class SettingsStore {
             onChange?()
         }
     }
-    var iconMode: MenuBarIconMode {
+    /// Which elements the status item shows while a phase is active. All three
+    /// are independent; any combination is valid, including none (the idle
+    /// timer symbol still appears when no phase runs).
+    var showProgressRing: Bool {
         didSet {
-            defaults.set(iconMode.rawValue, forKey: "iconMode")
+            defaults.set(showProgressRing, forKey: "showProgressRing")
+            onChange?()
+        }
+    }
+    var showTime: Bool {
+        didSet {
+            defaults.set(showTime, forKey: "showTime")
+            onChange?()
+        }
+    }
+    var showTaskCount: Bool {
+        didSet {
+            defaults.set(showTaskCount, forKey: "showTaskCount")
             onChange?()
         }
     }
@@ -145,7 +145,9 @@ final class SettingsStore {
             "autoStartBreaks": false,
             "autoStartFocus": false,
             "soundEnabled": true,
-            "iconMode": MenuBarIconMode.combined.rawValue,
+            "showProgressRing": true,
+            "showTime": true,
+            "showTaskCount": false,
             "quickAddOpens": QuickAddTarget.menuBarPanel.rawValue,
             "showInMenuBar": true,
         ])
@@ -156,7 +158,15 @@ final class SettingsStore {
         autoStartBreaks = defaults.bool(forKey: "autoStartBreaks")
         autoStartFocus = defaults.bool(forKey: "autoStartFocus")
         soundEnabled = defaults.bool(forKey: "soundEnabled")
-        iconMode = (MenuBarIconMode(rawValue: defaults.string(forKey: "iconMode") ?? "")) ?? .combined
+        if let migrated = Self.migrateIconMode(defaults: defaults) {
+            showProgressRing = migrated.ring
+            showTime = migrated.time
+            showTaskCount = migrated.tasks
+        } else {
+            showProgressRing = defaults.object(forKey: "showProgressRing") as? Bool ?? true
+            showTime = defaults.object(forKey: "showTime") as? Bool ?? true
+            showTaskCount = defaults.bool(forKey: "showTaskCount")
+        }
         quickAddOpens =
             (QuickAddTarget(rawValue: defaults.string(forKey: "quickAddOpens") ?? "")) ?? .menuBarPanel
         if let data = defaults.data(forKey: "quickAddShortcut"),
@@ -168,5 +178,20 @@ final class SettingsStore {
         }
         showInMenuBar = defaults.object(forKey: "showInMenuBar") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    /// One-time migration from the retired exclusive icon-mode enum: maps the
+    /// stored mode onto the element checkboxes. Returns nil when the key is
+    /// absent (fresh install) or already migrated (the key is removed after
+    /// mapping).
+    private static func migrateIconMode(defaults: UserDefaults) -> (ring: Bool, time: Bool, tasks: Bool)? {
+        guard let raw = defaults.string(forKey: "iconMode") else { return nil }
+        defaults.removeObject(forKey: "iconMode")
+        switch raw {
+        case "progressRing": return (true, false, false)
+        case "timer": return (false, true, false)
+        case "combined": return (true, true, false)
+        default: return nil
+        }
     }
 }

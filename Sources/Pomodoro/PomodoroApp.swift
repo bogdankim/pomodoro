@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var statusItem = StatusItemController(
         model: model,
         settings: settings,
+        tasks: tasks,
         content: PopoverContent(model: model, tasks: tasks, notes: notes, settings: settings)
     )
 
@@ -100,6 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.summaryPanel.show()
         }
         model.onStateChange = { [weak self] in
+            self?.statusItem.refreshIcon()
+        }
+        tasks.onOpenCountChange = { [weak self] in
             self?.statusItem.refreshIcon()
         }
         settings.onChange = { [weak self] in

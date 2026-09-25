@@ -39,6 +39,10 @@ final class TaskListModel {
         TaskListLogic.openCount(tasks)
     }
 
+    /// Called when the open-task count changes so non-SwiftUI surfaces (the
+    /// status item) can re-render outside the timer tick.
+    var onOpenCountChange: (() -> Void)?
+
     /// Tasks completed within a window, including ones already removed from view.
     func completed(since start: Date, until end: Date = Date()) -> [TaskItem] {
         TaskListLogic.completed(tasks, since: start, until: end)
@@ -104,6 +108,7 @@ final class TaskListModel {
         withAnimation(.listChange) {
             graceTick += 1
         }
+        notifyOpenCountChange()
     }
 
     // MARK: - Persistence
@@ -137,5 +142,17 @@ final class TaskListModel {
         if let data = try? encoder.encode(tasks) {
             try? data.write(to: Self.storeURL, options: .atomic)
         }
+        notifyOpenCountChange()
     }
+
+    /// Fires `onOpenCountChange` when the open (not done) count differs from
+    /// the last notified value.
+    private func notifyOpenCountChange() {
+        let count = openCount
+        guard count != lastNotifiedOpenCount else { return }
+        lastNotifiedOpenCount = count
+        onOpenCountChange?()
+    }
+
+    private var lastNotifiedOpenCount = -1
 }

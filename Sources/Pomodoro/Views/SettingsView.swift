@@ -29,14 +29,19 @@ struct SettingsView: View {
                     "A long break follows the set number of focus sessions. Changes apply to the next phase.")
             }
 
-            Section("Menu Bar") {
-                Picker("Icon", selection: $settings.iconMode) {
-                    ForEach(MenuBarIconMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-                .accessibilityLabel("Menu bar icon style")
+            Section {
+                Toggle("Progress ring", isOn: $settings.showProgressRing)
+                    .disabled(settings.showProgressRing && !settings.showTime && !settings.showTaskCount)
+                Toggle("Time", isOn: $settings.showTime)
+                    .disabled(!settings.showProgressRing && settings.showTime && !settings.showTaskCount)
+                Toggle("Tasks", isOn: $settings.showTaskCount)
+                    .disabled(!settings.showProgressRing && !settings.showTime && settings.showTaskCount)
+            } header: {
+                Text("Menu Bar")
+            } footer: {
+                Text(
+                    "Shown while a timer runs; combine them freely, but keep at least one. The task count is the number of open tasks."
+                )
             }
 
             Section {

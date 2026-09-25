@@ -13,13 +13,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let model: AppModel
     private let settings: SettingsStore
+    private let tasks: TaskListModel
     private var hosting: NSHostingController<PopoverContent>!
     private var anchorWindow: NSWindow?
     private var lastPopoverCloseDate: Date?
 
-    init(model: AppModel, settings: SettingsStore, content: PopoverContent) {
+    init(model: AppModel, settings: SettingsStore, tasks: TaskListModel, content: PopoverContent) {
         self.model = model
         self.settings = settings
+        self.tasks = tasks
 
         super.init()
 
@@ -201,9 +203,27 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func refreshIcon() {
         guard let button = statusItem.button else { return }
 
+        var title = ""
+        if settings.showTime {
+            title += model.timeText
+        }
+        if settings.showTaskCount {
+            if !title.isEmpty { title += " " }
+            title += "\(tasks.openCount)"
+        }
+        let showIdleSymbol = settings.showProgressRing || settings.showTime
+
         guard model.isActive else {
-            button.image = Self.symbolImage()
-            button.attributedTitle = NSAttributedString()
+            if showIdleSymbol {
+                button.image = Self.symbolImage()
+            } else {
+                // Tasks only: the count is the whole item.
+                button.image = nil
+                title = "\(tasks.openCount)"
+            }
+            button.attributedTitle = title.isEmpty ? NSAttributedString() : Self.timeText(title)
+            button.imagePosition = .imageLeading
+            button.imageHugsTitle = true
             return
         }
 
@@ -211,19 +231,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let phase = model.phase ?? .focus
         let elapsed = model.engine.progress(now: Date())
         let fill = phase.isBreak ? elapsed : 1 - elapsed
-        switch settings.iconMode {
-        case .progressRing:
-            button.image = Self.ringImage(fill: fill)
-            button.attributedTitle = NSAttributedString()
-        case .timer:
-            button.image = nil
-            button.attributedTitle = Self.timeText(model.timeText)
-        case .combined:
-            button.image = Self.ringImage(fill: fill)
-            button.attributedTitle = Self.timeText(model.timeText)
-            button.imagePosition = .imageLeading
-            button.imageHugsTitle = true
-        }
+
+        button.image = settings.showProgressRing ? Self.ringImage(fill: fill) : nil
+        button.attributedTitle = title.isEmpty ? NSAttributedString() : Self.timeText(title)
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
     }
 
     private static func symbolImage() -> NSImage {
