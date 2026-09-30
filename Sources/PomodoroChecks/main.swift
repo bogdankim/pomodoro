@@ -335,6 +335,23 @@ func runVaultSyncChecks() {
     result = VaultSync.merge(local: openBase, vault: doneInVault, base: openBase, now: t0)
     expectTrue(result.entries.allSatisfy(\.isDone), "vault done-state adopted")
 
+    // The completion race: the app checked the task, the write hasn't
+    // landed yet, and the poll still reads the open state from the vault.
+    // Local evidence (app moved away from base, vault didn't) must win —
+    // the checkmark is never reverted.
+    result = VaultSync.merge(local: doneInVault, vault: openBase, base: openBase, now: t0)
+    expect(result.entries.map(\.isDone), [true], "local check survives the write race")
+    expectTrue(result.vaultNeedsWrite, "raced check pushes to vault")
+
+    // The reverse race: a vault-side uncheck with the app still done.
+    result = VaultSync.merge(local: doneInVault, vault: openBase, base: doneInVault, now: t0)
+    expect(result.entries.map(\.isDone), [false], "vault uncheck adopted")
+
+    // Priority changed in the vault while the app did nothing.
+    let priorityEdit = [VaultEntry(kind: .task, title: "shared", priority: .high)]
+    result = VaultSync.merge(local: openBase, vault: priorityEdit, base: openBase, now: t0)
+    expect(result.entries.map(\.priority), [TaskItem.Priority.high], "vault priority adopted")
+
     // Same entry added independently on both sides is not duplicated.
     result = VaultSync.merge(local: both, vault: both, base: [], now: t0)
     expect(result.entries.count, 1, "independent adds dedupe")

@@ -103,7 +103,9 @@ final class VaultStore {
         let text: String
         do {
             text = try String(contentsOf: noteURL, encoding: .utf8)
-        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+        } catch let error as NSError
+            where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError
+        {
             // Genuinely no note yet: an empty vault state, written on push.
             text = ""
         } catch {
