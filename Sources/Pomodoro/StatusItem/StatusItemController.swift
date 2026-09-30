@@ -203,6 +203,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func refreshIcon() {
         guard let button = statusItem.button else { return }
 
+        if settings.tasksOnlyMode {
+            // Tasks-only: the open count is the whole item, idle and running
+            // alike; no timer imagery at all.
+            button.image = nil
+            let title = "\(tasks.openCount)"
+            button.attributedTitle = title.isEmpty ? NSAttributedString() : Self.timeText(title)
+            button.imagePosition = .imageLeading
+            button.imageHugsTitle = true
+            return
+        }
+
         var title = ""
         if settings.showTime {
             title += model.timeText

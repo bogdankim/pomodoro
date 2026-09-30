@@ -107,6 +107,31 @@ final class SettingsStore {
         }
     }
 
+    /// Whether captures sync into the Obsidian vault as daily-note markdown.
+    var vaultSyncEnabled: Bool {
+        didSet {
+            defaults.set(vaultSyncEnabled, forKey: "vaultSyncEnabled")
+            onChange?()
+        }
+    }
+
+    /// The vault root the user picked; sync writes into `Daily/` beneath it.
+    var vaultPath: String {
+        didSet {
+            defaults.set(vaultPath, forKey: "vaultPath")
+            onChange?()
+        }
+    }
+
+    /// Hides every timer surface: the popover shows only capture and lists,
+    /// and the menu bar item reduces to the open-task count.
+    var tasksOnlyMode: Bool {
+        didSet {
+            defaults.set(tasksOnlyMode, forKey: "tasksOnlyMode")
+            onChange?()
+        }
+    }
+
     /// Called on every settings change so non-SwiftUI surfaces (the status item)
     /// can re-render.
     var onChange: (() -> Void)?
@@ -150,6 +175,9 @@ final class SettingsStore {
             "showTaskCount": false,
             "quickAddOpens": QuickAddTarget.menuBarPanel.rawValue,
             "showInMenuBar": true,
+            "vaultSyncEnabled": false,
+            "vaultPath": "",
+            "tasksOnlyMode": false,
         ])
         focusMinutes = defaults.integer(forKey: "focusMinutes")
         shortBreakMinutes = defaults.integer(forKey: "shortBreakMinutes")
@@ -177,6 +205,9 @@ final class SettingsStore {
             quickAddShortcut = .default
         }
         showInMenuBar = defaults.object(forKey: "showInMenuBar") as? Bool ?? true
+        vaultSyncEnabled = defaults.bool(forKey: "vaultSyncEnabled")
+        vaultPath = defaults.string(forKey: "vaultPath") ?? ""
+        tasksOnlyMode = defaults.bool(forKey: "tasksOnlyMode")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

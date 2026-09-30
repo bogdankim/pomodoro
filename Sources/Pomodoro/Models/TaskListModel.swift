@@ -43,6 +43,10 @@ final class TaskListModel {
     /// status item) can re-render outside the timer tick.
     var onOpenCountChange: (() -> Void)?
 
+    /// Called after any list mutation (vault sync included) so the vault
+    /// layer can push the change.
+    var onListChange: (() -> Void)?
+
     /// Tasks completed within a window, including ones already removed from view.
     func completed(since start: Date, until end: Date = Date()) -> [TaskItem] {
         TaskListLogic.completed(tasks, since: start, until: end)
@@ -90,6 +94,38 @@ final class TaskListModel {
         }
         graceTasks[id]?.cancel()
         graceTasks[id] = nil
+        save()
+    }
+
+    // MARK: - Vault sync
+
+    /// Replaces the whole list from a vault merge. Entries keep the ids they
+    /// arrived with, so unchanged rows never animate; done tasks keep their
+    /// completion timestamps and re-enter the grace window.
+    func replaceFromVault(_ items: [TaskItem]) {
+        graceTasks.values.forEach { $0.cancel() }
+        graceTasks.removeAll()
+        withAnimation(.listChange) {
+            tasks = items
+        }
+        for task in tasks where task.isDone {
+            scheduleGraceRemoval(for: task.id)
+        }
+        graceTick += 1
+        save()
+    }
+
+    /// Moves open tasks to a new day at rollover: fresh timestamps so today's
+    /// list orders them newest first. Completed tasks stay where they were
+    /// completed — history belongs to its day.
+    func carryOverOpenTasks(to date: Date) {
+        let open = tasks.filter { !$0.isDone }
+        guard !open.isEmpty else { return }
+        withAnimation(.listChange) {
+            for index in tasks.indices where !tasks[index].isDone {
+                tasks[index].createdAt = date
+            }
+        }
         save()
     }
 
@@ -143,6 +179,7 @@ final class TaskListModel {
             try? data.write(to: Self.storeURL, options: .atomic)
         }
         notifyOpenCountChange()
+        onListChange?()
     }
 
     /// Fires `onOpenCountChange` when the open (not done) count differs from

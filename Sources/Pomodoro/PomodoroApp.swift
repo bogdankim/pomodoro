@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let settings = SettingsStore()
     let tasks = TaskListModel()
     let notes = NoteListModel()
+    private(set) lazy var vault = VaultStore(settings: settings, tasks: tasks, notes: notes)
 
     private(set) lazy var model = AppModel(settings: settings, tasks: tasks)
 
@@ -25,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model: model,
         settings: settings,
         tasks: tasks,
-        content: PopoverContent(model: model, tasks: tasks, notes: notes, settings: settings)
+        content: PopoverContent(model: model, tasks: tasks, notes: notes, settings: settings, vault: vault)
     )
 
     private(set) lazy var quickAddPanel: FloatingPanelController<QuickAddPanelView> = FloatingPanelController(
@@ -97,6 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = quickAddPanel
         _ = summaryPanel
         _ = hotKey
+        if settings.vaultSyncEnabled { vault.start() }
+        tasks.onListChange = { [weak self] in self?.vault.pushSoon() }
+        notes.onListChange = { [weak self] in self?.vault.pushSoon() }
         model.onSummaryAvailable = { [weak self] in
             self?.summaryPanel.show()
         }
@@ -112,6 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.refreshCountdownDisplay()
             hotKey?.update(settings.quickAddShortcut)
             statusItem.setVisible(settings.showInMenuBar)
+            if settings.vaultSyncEnabled {
+                vault.start()
+            } else {
+                vault.stop()
+            }
         }
     }
 }

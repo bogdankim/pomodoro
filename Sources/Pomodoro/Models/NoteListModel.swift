@@ -22,6 +22,10 @@ final class NoteListModel {
         NoteListLogic.visible(notes)
     }
 
+    /// Called after any list mutation (vault sync included) so the vault
+    /// layer can push the change.
+    var onListChange: (() -> Void)?
+
     // MARK: - Mutations
 
     func add(text: String) {
@@ -39,6 +43,17 @@ final class NoteListModel {
     func remove(_ id: UUID) {
         withAnimation(.listChange) {
             notes.removeAll { $0.id == id }
+        }
+        save()
+    }
+
+    // MARK: - Vault sync
+
+    /// Replaces the whole list from a vault merge. Entries keep the ids they
+    /// arrived with, so unchanged rows never animate.
+    func replaceFromVault(_ items: [NoteItem]) {
+        withAnimation(.listChange) {
+            notes = items
         }
         save()
     }
@@ -66,5 +81,6 @@ final class NoteListModel {
         if let data = try? encoder.encode(notes) {
             try? data.write(to: Self.storeURL, options: .atomic)
         }
+        onListChange?()
     }
 }

@@ -2,6 +2,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# A stray SDKROOT pointing at the CommandLineTools SDK breaks the Xcode
+# toolchain (compiler/SDK version skew); xcode-select owns the SDK choice.
+unset SDKROOT
+
 CONFIG="${1:-release}"
 swift build -c "$CONFIG"
 

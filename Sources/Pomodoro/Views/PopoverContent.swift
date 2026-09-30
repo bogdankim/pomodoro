@@ -14,9 +14,11 @@ struct PopoverContent: View {
     let tasks: TaskListModel
     let notes: NoteListModel
     let settings: SettingsStore
+    let vault: VaultStore
 
     var body: some View {
         content
+            .environment(vault)
             // One tree, never squeezed: fixedSize pins the content to its
             // natural height regardless of the window's current (animated)
             // frame, so layout is stable and nothing is clipped mid-glide.
@@ -32,14 +34,17 @@ struct PopoverContent: View {
             }
     }
 
+    @ViewBuilder
     private var content: some View {
-        VStack(spacing: 0) {
+        if settings.tasksOnlyMode {
+            CaptureAndListSection(tasks: tasks, notes: notes)
+                .padding(.top, 12)
+        } else {
             header
                 .frame(height: headerHeight)
             CaptureAndListSection(tasks: tasks, notes: notes)
-            FooterBar(model: model, tasks: tasks)
         }
-        .frame(width: 300)
+        FooterBar(model: model, tasks: tasks, settings: settings)
     }
 
     /// Fixed-height top block: timer, controls, first divider. The height is
@@ -232,6 +237,8 @@ private struct ControlsRow: View {
 private struct FooterBar: View {
     let model: AppModel
     let tasks: TaskListModel
+    let settings: SettingsStore
+    @Environment(VaultStore.self) private var vault
 
     var body: some View {
         HStack(spacing: 14) {
@@ -267,10 +274,27 @@ private struct FooterBar: View {
     }
 
     private var footerText: String {
+        if !tasksOnlyText.isEmpty { return tasksOnlyText }
         if model.focusSessionsToday > 0 {
             let sessions = model.focusSessionsToday == 1 ? "session" : "sessions"
             return "\(model.focusSessionsToday) focus \(sessions) today"
         }
-        return "Press ⌘⇧P to add a task from anywhere"
+        return "Press \(settings.quickAddShortcut.displayName) to add a task from anywhere"
+    }
+
+    /// Tasks-only mode: the footer reports sync state instead of timer stats.
+    private var tasksOnlyText: String {
+        guard settings.tasksOnlyMode else { return "" }
+        if !settings.vaultSyncEnabled { return "Tasks only · sync off" }
+        switch vault.status {
+        case .idle:
+            if let last = vault.lastSyncDate {
+                let time = last.formatted(date: .omitted, time: .shortened)
+                return "Synced with Obsidian · \(time)"
+            }
+            return "Synced with Obsidian"
+        case .error(let message):
+            return message
+        }
     }
 }
