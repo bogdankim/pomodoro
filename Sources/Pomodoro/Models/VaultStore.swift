@@ -100,13 +100,23 @@ final class VaultStore {
 
         rollDayIfNeeded()
         let noteURL = dailyNoteURL(root: root)
-        let text = (try? String(contentsOf: noteURL, encoding: .utf8)) ?? ""
-
-        if text == lastWritten[currentDay] {
-            base[currentDay] = localEntries()
-            status = .idle
+        let text: String
+        do {
+            text = try String(contentsOf: noteURL, encoding: .utf8)
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            // Genuinely no note yet: an empty vault state, written on push.
+            text = ""
+        } catch {
+            // An unreadable file must never read as an empty note — that
+            // would classify every entry as vault-deleted and wipe both
+            // sides. Skip the cycle and surface the error instead.
+            status = .error("Read failed: \(error.localizedDescription)")
             return
         }
+
+        // Always merge: the comparison against `lastWritten` cannot skip this
+        // step, because local captures need a push even when the file still
+        // holds exactly what the app last wrote.
         let (vaultEntries, doneDates) = VaultMarkdown.entries(in: text)
         let result = VaultSync.merge(
             local: localEntries(), vault: vaultEntries, base: base[currentDay] ?? [], now: Date())
