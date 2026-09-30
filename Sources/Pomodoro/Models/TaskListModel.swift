@@ -115,17 +115,15 @@ final class TaskListModel {
         save()
     }
 
-    /// Moves open tasks to a new day at rollover: fresh timestamps so today's
-    /// list orders them newest first. Completed tasks stay where they were
-    /// completed — history belongs to its day.
-    func carryOverOpenTasks(to date: Date) {
-        let open = tasks.filter { !$0.isDone }
-        guard !open.isEmpty else { return }
+    /// Empties the list for a new day. History stays in the vault's previous
+    /// daily note; the app shows only the current day.
+    func clear() {
+        graceTasks.values.forEach { $0.cancel() }
+        graceTasks.removeAll()
         withAnimation(.listChange) {
-            for index in tasks.indices where !tasks[index].isDone {
-                tasks[index].createdAt = date
-            }
+            tasks = []
         }
+        graceTick += 1
         save()
     }
 

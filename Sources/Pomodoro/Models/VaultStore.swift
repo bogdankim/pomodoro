@@ -35,7 +35,9 @@ final class VaultStore {
     private var base: [String: [VaultEntry]] = [:]
     /// The exact text the app last wrote for a day, so polls skip echoes.
     private var lastWritten: [String: String] = [:]
-    private var currentDay: String = VaultStore.todayKey()
+    /// The day the persisted store belongs to. A launch on any later day
+    /// means the store holds yesterday's data: cleared before first sync.
+    private var currentDay: String
     /// True while the store is rebuilding the models from merged state, so
     /// the resulting model callbacks don't schedule a redundant push.
     private var isApplyingToModels = false
@@ -44,10 +46,23 @@ final class VaultStore {
         self.settings = settings
         self.tasks = tasks
         self.notes = notes
+        let stored = UserDefaults.standard.string(forKey: "vaultSyncDay")
+        currentDay = stored ?? VaultStore.todayKey()
+        if settings.vaultSyncEnabled, currentDay < VaultStore.todayKey() {
+            // Yesterday's store: the new day starts blank. The old list is
+            // already in its daily note, and sync opens today's empty one.
+            tasks.clear()
+            notes.clear()
+            currentDay = VaultStore.todayKey()
+            UserDefaults.standard.set(currentDay, forKey: "vaultSyncDay")
+        }
     }
 
+    /// The first sync persists the day key; afterwards every rollover
+    /// updates it so the next launch knows how old the store is.
     func start() {
         guard pollTimer == nil else { return }
+        UserDefaults.standard.set(currentDay, forKey: "vaultSyncDay")
         syncNow()
         let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.syncNow() }
@@ -92,7 +107,6 @@ final class VaultStore {
             status = .idle
             return
         }
-
         let (vaultEntries, doneDates) = VaultMarkdown.entries(in: text)
         let result = VaultSync.merge(
             local: localEntries(), vault: vaultEntries, base: base[currentDay] ?? [], now: Date())
@@ -134,9 +148,12 @@ final class VaultStore {
         guard today != currentDay else { return }
         currentDay = today
         pruneOldDays(keeping: today)
-        // Open tasks carry over: the previous note keeps its history, and the
-        // fresh createdAt makes today's list order them newest first.
-        tasks.carryOverOpenTasks(to: Date())
+        // The vault's daily note is the database: a new day starts blank in
+        // the app, and yesterday's list lives on in yesterday's note.
+        tasks.clear()
+        notes.clear()
+        base[currentDay] = []
+        lastWritten[currentDay] = nil
     }
 
     private func pruneOldDays(keeping day: String) {

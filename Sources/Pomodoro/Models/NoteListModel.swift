@@ -58,6 +58,15 @@ final class NoteListModel {
         save()
     }
 
+    /// Empties the list for a new day. History stays in the vault's previous
+    /// daily note; the app shows only the current day.
+    func clear() {
+        withAnimation(.listChange) {
+            notes = []
+        }
+        save()
+    }
+
     // MARK: - Persistence
 
     private static var storeURL: URL {

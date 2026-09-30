@@ -74,7 +74,7 @@ Settings → Obsidian → Sync with Obsidian mirrors tasks and notes into a vaul
 - Priority rides as a `#p1`–`#p3` tag: `#p1` is low, `#p3` is high (the app's Low/Medium/High). Tags are plain Obsidian tags, so Tasks/Dataview queries work.
 - Completion stamps follow the Tasks plugin's `✅ YYYY-MM-DD` format.
 - Sync is two-way and content-keyed. Edit the note in Obsidian — check a box, add a line, delete one — and the change merges back into the app within a couple of seconds; captures made in the app land in the note just as fast. Editing the same entry on both sides at once resolves to the app's version.
-- Open tasks carry over to the new day's note at midnight; completed ones stay in the day they were done.
+- The vault is the database, one day per note: a new day starts with a blank app, and yesterday's list lives on in yesterday's note.
 - Sync polls every 2 seconds (the reliable option on iCloud-mounted vaults) and needs no Obsidian plugin or REST server — the vault is plain markdown on disk.
 
 Tasks also persist to `~/Library/Application Support/Pomodoro/tasks.json` (the sync source of truth for the app side); settings live in `UserDefaults`.
