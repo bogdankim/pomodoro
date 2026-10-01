@@ -30,9 +30,9 @@ public enum VaultSync {
         base: [VaultEntry],
         now: Date
     ) -> Result {
-        let baseKeys = Set(base.map(\.mergeKey))
-        let localKeys = Set(local.map(\.mergeKey))
-        let vaultKeys = Set(vault.map(\.mergeKey))
+        let baseKeys = Set(base.compactMap(\.mergeKey))
+        let localKeys = Set(local.compactMap(\.mergeKey))
+        let vaultKeys = Set(vault.compactMap(\.mergeKey))
         let deletedLocally = baseKeys.subtracting(localKeys)
         let deletedInVault = baseKeys.subtracting(vaultKeys)
         let dead = deletedLocally.union(deletedInVault)
@@ -67,8 +67,9 @@ public enum VaultSync {
         }
         // Vault-only keys: additions made in Obsidian. Renames read as a new
         // key, so they surface here and in the matching deletion above.
-        for (key, entry) in vaultByKey.sorted(by: { $0.value.createdAt < $1.value.createdAt })
-        where !localKeys.contains(key) {
+        for (key, entry) in vaultByKey.sorted(by: {
+            ($0.value.createdAt ?? .distantPast) < ($1.value.createdAt ?? .distantPast)
+        }) where !localKeys.contains(key) {
             merged.append(entry)
         }
 
@@ -119,7 +120,7 @@ public enum VaultSync {
             if !lhs.isDone, lhs.priority != rhs.priority {
                 return (lhs.priority ?? .medium) > (rhs.priority ?? .medium)
             }
-            return lhs.createdAt < rhs.createdAt
+            return (lhs.createdAt ?? .distantPast) < (rhs.createdAt ?? .distantPast)
         }
     }
 }

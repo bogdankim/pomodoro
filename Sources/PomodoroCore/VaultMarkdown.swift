@@ -14,7 +14,9 @@ public enum VaultMarkdown {
     public static let donePrefix = "- [x] "
 
     /// Renders one entry as a markdown list line.
-    public static func line(for entry: VaultEntry, doneOn: Date?) -> String {
+    public static func line(
+        for entry: VaultEntry, doneOn: Date?, uses24Hour: Bool = true, dayBasis: Date = Date()
+    ) -> String {
         let completion: String
         if entry.isDone, let doneOn {
             completion = " ✅ \(doneDateFormatter.string(from: doneOn))"
@@ -27,7 +29,15 @@ public enum VaultMarkdown {
             let tag = entry.priority.map { " \($0.vaultTag)" } ?? ""
             return "\(checkbox)\(entry.title)\(tag)\(completion)"
         case .note:
-            return "- \(entry.title)"
+            // The timestamp is decoration, never part of the title: plain
+            // foreign lines (no createdAt) render bare even after a format
+            // switch, so the format toggle never manufactures identity.
+            guard let created = entry.createdAt else {
+                return "- \(entry.title)"
+            }
+            let stamp = NoteTimestamp.render(
+                created, uses24Hour: uses24Hour, calendar: Self.noteCalendar)
+            return "- \(stamp) \(entry.title)"
         }
     }
 
@@ -37,7 +47,7 @@ public enum VaultMarkdown {
     /// Returns nil for anything that is not a checkbox task or a plain list
     /// note; foreign lines are left untouched by rewriting.
     public static func entry(
-        from line: String, createdAt: Date = Date(), doneOn: inout Date?
+        from line: String, createdAt: Date?, doneOn: inout Date?
     ) -> VaultEntry? {
         for prefix in [donePrefix, uppercasedDonePrefix, taskPrefix] {
             guard line.hasPrefix(prefix) else { continue }
@@ -85,6 +95,10 @@ public enum VaultMarkdown {
     private static let uppercasedDonePrefix = "- [X] "
     private static let completionStampPattern = "✅ \\d{4}-\\d{2}-\\d{2}\\s*$"
 
+    /// The single calendar used everywhere timestamps are rendered and
+    /// reconstructed, so a stamp round-trips to the same time of day.
+    public static let noteCalendar = Calendar.current
+
     private static let doneDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -118,8 +132,13 @@ public enum VaultMarkdown {
     /// sections are replaced with the rendered lines; every other line —
     /// headings, prose, foreign list items — is preserved byte for byte.
     /// Missing sections are appended in canonical order (Tasks, then Notes).
-    /// Idempotent: applying the same entries twice leaves the text unchanged.
-    public static func applying(entries: [VaultEntry], doneDates: [String: Date], to text: String) -> String {
+    /// `dayBasis` anchors reconstructed note stamps to the note's day, and
+    /// `uses24Hour` selects the stamp format. Idempotent: applying the same
+    /// entries twice leaves the text unchanged.
+    public static func applying(
+        entries: [VaultEntry], doneDates: [String: Date], to text: String,
+        uses24Hour: Bool = true, dayBasis: Date = Date()
+    ) -> String {
         let tasks = entries.filter { $0.kind == .task }
         let notes = entries.filter { $0.kind == .note }
         var result = replacingSection(
@@ -131,7 +150,7 @@ public enum VaultMarkdown {
         result = replacingSection(
             heading: noteSectionHeading,
             lines: notes.map { entry in
-                line(for: entry, doneOn: nil)
+                line(for: entry, doneOn: nil, uses24Hour: uses24Hour, dayBasis: dayBasis)
             }, in: result)
         return result
     }
@@ -196,8 +215,12 @@ public enum VaultMarkdown {
 
     /// The entries found under the Tasks and Notes sections of a note, in
     /// document order. `doneDates` carries each task's `✅` stamp, keyed by
-    /// merge key, so completion dates survive the round trip.
-    public static func entries(in text: String) -> (entries: [VaultEntry], doneDates: [String: Date]) {
+    /// merge key, so completion dates survive the round trip. Note lines
+    /// starting with a timestamp get that time back as `createdAt` (the day
+    /// comes from `dayBasis`); their titles are stamp-free.
+    public static func entries(
+        in text: String, dayBasis: Date = Date()
+    ) -> (entries: [VaultEntry], doneDates: [String: Date]) {
         var entries: [VaultEntry] = []
         var doneDates: [String: Date] = [:]
         var section: VaultEntry.Kind?
@@ -216,6 +239,23 @@ public enum VaultMarkdown {
             }
             guard section != nil else { continue }
             var doneOn: Date?
+
+            if section == .note {
+                // A leading stamp becomes the note's createdAt, with the
+                // title stored stamp-free so the merge key is stable across
+                // 12h/24h formatting. Stampless lines stay timestamp-less.
+                var stampedAt: Date?
+                if let entry = VaultMarkdown.entry(from: line, createdAt: nil, doneOn: &stampedAt) {
+                    var stamped = entry
+                    if let stamp = NoteTimestamp.extract(from: stamped.title, dayBasis: dayBasis) {
+                        stamped.createdAt = stamp.date
+                        stamped.title = stamp.text
+                    }
+                    entries.append(stamped)
+                }
+                continue
+            }
+
             guard let entry = entry(from: line, createdAt: .init(), doneOn: &doneOn) else { continue }
             entries.append(entry)
             if let doneOn {

@@ -212,7 +212,7 @@ func runVaultMarkdownChecks() {
     expect(
         VaultMarkdown.line(for: high, doneOn: nil), "- [ ] ship it #p3", "open task line")
     var none: Date?
-    let parsed = VaultMarkdown.entry(from: "- [ ] ship it #p3", doneOn: &none)!
+    let parsed = VaultMarkdown.entry(from: "- [ ] ship it #p3", createdAt: t0, doneOn: &none)!
     expect(parsed.title, "ship it", "task parse title")
     expect(parsed.priority, TaskItem.Priority.high, "task parse priority")
     expect(parsed.isDone, false, "task parse open")
@@ -222,7 +222,7 @@ func runVaultMarkdownChecks() {
     let doneLine = VaultMarkdown.line(for: done, doneOn: t0)
     expectTrue(doneLine.hasPrefix("- [x] ship it #p2 ✅ "), "done line format")
     var stamp: Date?
-    let doneParsed = VaultMarkdown.entry(from: doneLine, doneOn: &stamp)!
+    let doneParsed = VaultMarkdown.entry(from: doneLine, createdAt: t0, doneOn: &stamp)!
     expect(doneParsed.title, "ship it", "done parse strips stamp")
     expect(doneParsed.isDone, true, "done parse state")
     expectTrue(stamp != nil, "done parse keeps stamp")
@@ -233,12 +233,12 @@ func runVaultMarkdownChecks() {
     // Foreign lines never parse.
     var discard: Date?
     expect(
-        VaultMarkdown.entry(from: "- [ ] task with block ^abc", doneOn: &discard) != nil, true,
+        VaultMarkdown.entry(from: "- [ ] task with block ^abc", createdAt: t0, doneOn: &discard) != nil, true,
         "block id tolerated")
-    expect(VaultMarkdown.entry(from: "Some prose", doneOn: &discard), nil, "prose rejected")
+    expect(VaultMarkdown.entry(from: "Some prose", createdAt: t0, doneOn: &discard), nil, "prose rejected")
     // Uppercased checkboxes are valid GFM done markers and parse as done.
     expect(
-        VaultMarkdown.entry(from: "- [X] uppercase checkbox", doneOn: &discard)?.isDone, true,
+        VaultMarkdown.entry(from: "- [X] uppercase checkbox", createdAt: t0, doneOn: &discard)?.isDone, true,
         "uppercased done parsed")
 
     // Section rewrite replaces only the owned section.
@@ -266,7 +266,11 @@ func runVaultMarkdownChecks() {
     expectTrue(rewritten.contains("Morning standup notes here."), "brief preserved")
     expectTrue(rewritten.contains("- [ ] manual task #p1") == false, "old tasks replaced")
     expectTrue(rewritten.contains("- [ ] app task #p1"), "task written")
-    expectTrue(rewritten.contains("- app note"), "note written")
+    // Notes render with a leading stamp (the entry's createdAt, 24-hour by
+    // default); foreign stampless lines stay bare.
+    expectTrue(
+        rewritten.range(of: #"- \d{2}:\d{2} app note"#, options: .regularExpression) != nil,
+        "note written with stamp")
     expectTrue(rewritten.contains("---"), "horizontal rules preserved")
 
     // Idempotent: same entries twice leaves text unchanged.
@@ -366,12 +370,89 @@ func runVaultSyncChecks() {
     expect(result.entries.map(\.title), ["high", "low", "a note"], "display ordering")
 }
 
+func runNoteTimestampChecks() {
+    let calendar = Calendar.current
+    // Today at 14:05 local.
+    var day = calendar.dateComponents([.year, .month, .day], from: Date())
+    day.hour = 14
+    day.minute = 5
+    let noon = calendar.date(from: day)!
+    let dayBasis = calendar.startOfDay(for: noon)
+
+    // Rendering both formats.
+    expect(NoteTimestamp.render(noon, uses24Hour: true, calendar: calendar), "14:05", "24h render")
+    expect(NoteTimestamp.render(noon, uses24Hour: false, calendar: calendar), "2:05 PM", "12h render")
+    var midnightish = day
+    midnightish.hour = 0
+    midnightish.minute = 7
+    let early = calendar.date(from: midnightish)!
+    expect(NoteTimestamp.render(early, uses24Hour: false, calendar: calendar), "12:07 AM", "12h midnight")
+    var evening = day
+    evening.hour = 23
+    evening.minute = 59
+    let late = calendar.date(from: evening)!
+    expect(NoteTimestamp.render(late, uses24Hour: false, calendar: calendar), "11:59 PM", "12h late")
+
+    // Round trip: parse what was rendered, same time of day back.
+    for uses24 in [true, false] {
+        let stamp = NoteTimestamp.render(noon, uses24Hour: uses24, calendar: calendar)
+        guard
+            let parsed = NoteTimestamp.extract(
+                from: "\(stamp) ship it", dayBasis: dayBasis, calendar: calendar)
+        else {
+            expectTrue(false, "stamp parses 24h=\(uses24)")
+            continue
+        }
+        expect(
+            calendar.dateComponents([.hour, .minute], from: parsed.date),
+            calendar.dateComponents([.hour, .minute], from: noon),
+            "round trip 24h=\(uses24)")
+        expect(parsed.text, "ship it", "text after stamp 24h=\(uses24)")
+    }
+
+    // Foreign payloads never parse.
+    expectTrue(
+        NoteTimestamp.extract(from: "no stamp here", dayBasis: dayBasis, calendar: calendar) == nil,
+        "plain text")
+    expectTrue(
+        NoteTimestamp.extract(from: "25:00 o'clock", dayBasis: dayBasis, calendar: calendar) == nil,
+        "invalid hour")
+    expectTrue(
+        NoteTimestamp.extract(from: "14:05", dayBasis: dayBasis, calendar: calendar) == nil,
+        "bare stamp needs text")
+    expectTrue(
+        NoteTimestamp.extract(from: "14:055 text", dayBasis: dayBasis, calendar: calendar) == nil,
+        "not a stamp shape")
+
+    // Note lines round-trip through the markdown layer.
+    let note = VaultEntry(kind: .note, title: "call the bank", createdAt: noon)
+    let line24 = VaultMarkdown.line(for: note, doneOn: nil, uses24Hour: true, dayBasis: dayBasis)
+    expect(line24, "- 14:05 call the bank", "note line 24h")
+    let line12 = VaultMarkdown.line(for: note, doneOn: nil, uses24Hour: false, dayBasis: dayBasis)
+    expect(line12, "- 2:05 PM call the bank", "note line 12h")
+    let (parsedEntries, _) = VaultMarkdown.entries(in: "### Notes\n\n\(line12)\n", dayBasis: dayBasis)
+    expect(parsedEntries.first?.title, "call the bank", "parsed title is stamp-free")
+    expect(
+        parsedEntries.first?.createdAt.map { calendar.dateComponents([.hour, .minute], from: $0) },
+        calendar.dateComponents([.hour, .minute], from: noon),
+        "parsed stamp time")
+
+    // Foreign (stampless) lines keep no createdAt and render bare.
+    let (plain, _) = VaultMarkdown.entries(in: "### Notes\n\n- from quickadd\n", dayBasis: dayBasis)
+    expect(plain.first?.createdAt, nil, "stampless line stays stampless")
+    expect(
+        VaultMarkdown.line(for: plain.first!, doneOn: nil, uses24Hour: false, dayBasis: dayBasis),
+        "- from quickadd",
+        "stampless renders bare")
+}
+
 runEngineChecks()
 runTaskChecks()
 runNoteChecks()
 runFormattingChecks()
 runVaultMarkdownChecks()
 runVaultSyncChecks()
+runNoteTimestampChecks()
 
 if failures == 0 {
     print("All checks passed.")

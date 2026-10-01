@@ -5,8 +5,15 @@ import Foundation
 public enum NoteListLogic {
 
     /// Newest first; notes are a scratchpad, the latest thought matters most.
+    /// Stampless (vault-adopted) notes sort below everything timestamped.
     public static func sorted(_ notes: [NoteItem]) -> [NoteItem] {
-        notes.sorted { $0.createdAt > $1.createdAt }
+        notes.sorted { lhs, rhs in
+            switch (lhs.createdAt, rhs.createdAt) {
+            case (let l?, let r?): return l > r
+            case (.some, nil): return true
+            default: return false
+            }
+        }
     }
 
     /// Notes shown in the list, capped to keep the popover glanceable.

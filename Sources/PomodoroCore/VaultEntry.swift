@@ -19,7 +19,10 @@ public struct VaultEntry: Equatable, Sendable {
     public var title: String
     public var isDone: Bool
     public var priority: TaskItem.Priority?
-    public var createdAt: Date
+    /// For notes, nil means the vault line carries no leading timestamp
+    /// (foreign captures); the stamp is rendered only when a date exists.
+    /// Tasks always have a creation date.
+    public var createdAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -27,7 +30,7 @@ public struct VaultEntry: Equatable, Sendable {
         title: String,
         isDone: Bool = false,
         priority: TaskItem.Priority? = nil,
-        createdAt: Date = Date()
+        createdAt: Date? = Date()
     ) {
         self.id = id
         self.kind = kind
@@ -55,7 +58,7 @@ extension TaskItem {
             title: entry.title,
             priority: entry.priority ?? .medium,
             isDone: entry.isDone,
-            createdAt: entry.createdAt,
+            createdAt: entry.createdAt ?? Date(),
             doneAt: nil
         )
     }

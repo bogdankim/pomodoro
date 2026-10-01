@@ -91,9 +91,17 @@ final class VaultStore {
 
     /// Full sync cycle: day rollover, read, merge, pull, push.
     func syncNow() {
-        guard settings.vaultSyncEnabled else { return }
+        guard settings.vaultSyncEnabled else {
+            if ProcessInfo.processInfo.environment["POMODORO_SYNC_DEBUG"] != nil {
+                syncDebug("disabled")
+            }
+            return
+        }
         let root = URL(fileURLWithPath: settings.vaultPath, isDirectory: true)
         guard !settings.vaultPath.isEmpty, FileManager.default.fileExists(atPath: root.path) else {
+            if ProcessInfo.processInfo.environment["POMODORO_SYNC_DEBUG"] != nil {
+                syncDebug("vault folder not found: \(settings.vaultPath)")
+            }
             status = .error("Vault folder not found")
             return
         }
@@ -112,6 +120,9 @@ final class VaultStore {
             // An unreadable file must never read as an empty note — that
             // would classify every entry as vault-deleted and wipe both
             // sides. Skip the cycle and surface the error instead.
+            if ProcessInfo.processInfo.environment["POMODORO_SYNC_DEBUG"] != nil {
+                syncDebug("read failed: \(error)")
+            }
             status = .error("Read failed: \(error.localizedDescription)")
             return
         }
@@ -119,7 +130,8 @@ final class VaultStore {
         // Always merge: the comparison against `lastWritten` cannot skip this
         // step, because local captures need a push even when the file still
         // holds exactly what the app last wrote.
-        let (vaultEntries, doneDates) = VaultMarkdown.entries(in: text)
+        let (vaultEntries, doneDates) = VaultMarkdown.entries(
+            in: text, dayBasis: VaultMarkdown.noteCalendar.startOfDay(for: Date()))
         let result = VaultSync.merge(
             local: localEntries(), vault: vaultEntries, base: base[currentDay] ?? [], now: Date())
 
@@ -129,10 +141,12 @@ final class VaultStore {
         }
 
         let noteExists = FileManager.default.fileExists(atPath: noteURL.path)
-        if result.vaultNeedsWrite || (!result.entries.isEmpty && !noteExists) {
+        if result.vaultNeedsWrite || pendingFormatRewrite || (!result.entries.isEmpty && !noteExists) {
             do {
-                let written = try write(result.entries, doneDates: doneDates, to: noteURL, existing: text)
+                let written = try write(
+                    result.entries, doneDates: doneDates, to: noteURL, existing: text)
                 lastWritten[currentDay] = written
+                pendingFormatRewrite = false
             } catch {
                 status = .error("Write failed: \(error.localizedDescription)")
                 return
@@ -211,12 +225,33 @@ final class VaultStore {
         if text.isEmpty {
             text = "\(VaultMarkdown.taskSectionHeading)\n\n\(VaultMarkdown.noteSectionHeading)\n"
         }
-        let updated = VaultMarkdown.applying(entries: entries, doneDates: doneMap, to: text)
+        let updated = VaultMarkdown.applying(
+            entries: entries, doneDates: doneMap, to: text,
+            uses24Hour: settings.uses24HourNotes,
+            dayBasis: VaultMarkdown.noteCalendar.startOfDay(for: Date()))
 
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try updated.write(to: url, atomically: true, encoding: .utf8)
         return updated
+    }
+
+    /// One forced rewrite of today's note in the new timestamp format,
+    /// triggered by the settings toggle.
+    func rewriteNoteFormat() {
+        guard settings.vaultSyncEnabled else { return }
+        pendingFormatRewrite = true
+        syncNow()
+    }
+
+    private var pendingFormatRewrite = false
+
+    /// Debug tracing for sync cycles, enabled with POMODORO_SYNC_DEBUG.
+    /// stderr is unbuffered, so output survives even when stdout buffers.
+    private func syncDebug(_ message: String) {
+        guard ProcessInfo.processInfo.environment["POMODORO_SYNC_DEBUG"] != nil else { return }
+        let date = Date().formatted(date: .omitted, time: .standard)
+        FileHandle.standardError.write(Data("[sync \(date)] \(message)\n".utf8))
     }
 
     private static func todayKey() -> String {

@@ -73,6 +73,10 @@ struct SettingsView: View {
                             Button("Choose…") { chooseVaultFolder() }
                         }
                     }
+                    Picker("Note timestamps", selection: $settings.uses24HourNotes) {
+                        Text("24-hour").tag(true)
+                        Text("12-hour").tag(false)
+                    }
                 }
             } header: {
                 Text("Obsidian")

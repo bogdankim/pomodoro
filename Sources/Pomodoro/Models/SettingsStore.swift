@@ -132,6 +132,15 @@ final class SettingsStore {
         }
     }
 
+    /// Whether note timestamps render as 24-hour (`14:05`) or 12-hour
+    /// (`2:05 PM`). Switching rewrites the note lines in the vault.
+    var uses24HourNotes: Bool {
+        didSet {
+            defaults.set(uses24HourNotes, forKey: "uses24HourNotes")
+            onChange?()
+        }
+    }
+
     /// Called on every settings change so non-SwiftUI surfaces (the status item)
     /// can re-render.
     var onChange: (() -> Void)?
@@ -178,6 +187,7 @@ final class SettingsStore {
             "vaultSyncEnabled": false,
             "vaultPath": "",
             "tasksOnlyMode": false,
+            "uses24HourNotes": true,
         ])
         focusMinutes = defaults.integer(forKey: "focusMinutes")
         shortBreakMinutes = defaults.integer(forKey: "shortBreakMinutes")
@@ -208,6 +218,7 @@ final class SettingsStore {
         vaultSyncEnabled = defaults.bool(forKey: "vaultSyncEnabled")
         vaultPath = defaults.string(forKey: "vaultPath") ?? ""
         tasksOnlyMode = defaults.bool(forKey: "tasksOnlyMode")
+        uses24HourNotes = defaults.object(forKey: "uses24HourNotes") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

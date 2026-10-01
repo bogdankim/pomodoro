@@ -20,6 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let notes = NoteListModel()
     private(set) lazy var vault = VaultStore(settings: settings, tasks: tasks, notes: notes)
 
+    /// Tracks the last seen note-timestamp format so the settings toggle can
+    /// trigger exactly one note rewrite per switch.
+    private lazy var vaultUses24Hour = settings.uses24HourNotes
+
     private(set) lazy var model = AppModel(settings: settings, tasks: tasks)
 
     private(set) lazy var statusItem = StatusItemController(
@@ -120,6 +124,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 vault.start()
             } else {
                 vault.stop()
+            }
+            if vaultUses24Hour != settings.uses24HourNotes {
+                vaultUses24Hour = settings.uses24HourNotes
+                vault.rewriteNoteFormat()
             }
         }
     }
