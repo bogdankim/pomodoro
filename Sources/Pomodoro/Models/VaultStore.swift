@@ -2,6 +2,14 @@ import Foundation
 import Observation
 import PomodoroCore
 
+extension URL {
+    /// The vault root of a daily-note URL: two components up from
+    /// `<root>/Daily/YYYY-MM-DD.md`.
+    var vaultRoot: URL {
+        deletingLastPathComponent().deletingLastPathComponent()
+    }
+}
+
 /// Keeps the app's tasks and notes in two-way sync with the vault's daily
 /// notes: the app renders captures into `Daily/YYYY-MM-DD.md` under
 /// `### Tasks` / `### Notes`, and edits made in Obsidian merge back in.
@@ -211,8 +219,8 @@ final class VaultStore {
     }
 
     /// Renders the merged entries into the note and writes it, creating the
-    /// Daily folder and note (with the app's minimal section skeleton) when
-    /// missing. Returns the text written.
+    /// Daily folder and note (from the vault's configured daily template,
+    /// or a minimal skeleton) when missing. Returns the text written.
     private func write(_ entries: [VaultEntry], doneDates: [String: Date], to url: URL, existing: String)
         throws -> String
     {
@@ -223,7 +231,10 @@ final class VaultStore {
 
         var text = existing
         if text.isEmpty {
-            text = "\(VaultMarkdown.taskSectionHeading)\n\n\(VaultMarkdown.noteSectionHeading)\n"
+            // Reuse the vault's configured daily template when one exists
+            // (daily-notes core plugin, then QuickAdd), matching what a
+            // note created through Obsidian itself would look like.
+            text = DailyTemplate.text(root: url.vaultRoot) ?? Self.skeleton
         }
         let updated = VaultMarkdown.applying(
             entries: entries, doneDates: doneMap, to: text,
@@ -245,6 +256,13 @@ final class VaultStore {
     }
 
     private var pendingFormatRewrite = false
+
+    /// Sections the app creates when no template is configured.
+    private static let skeleton = """
+        \(VaultMarkdown.taskSectionHeading)
+
+        \(VaultMarkdown.noteSectionHeading)
+        """
 
     /// Debug tracing for sync cycles, enabled with POMODORO_SYNC_DEBUG.
     /// stderr is unbuffered, so output survives even when stdout buffers.

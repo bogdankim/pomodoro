@@ -289,6 +289,26 @@ func runVaultMarkdownChecks() {
     expectTrue(appended.contains("### Notes"), "notes heading created")
     expectTrue(appended.contains("Some intro."), "existing content preserved")
 
+    // A template round-trip is byte-stable: the app's sections slot in
+    // without eating the template's blank-line layout.
+    let templateNote = "### Brief\n\n---\n### Tasks\n\n---\n### Notes\n\n"
+    let templated = VaultMarkdown.applying(entries: entries, doneDates: [:], to: templateNote)
+    expectTrue(templated.contains("### Brief"), "template brief preserved")
+    expectTrue(
+        templated.contains("### Tasks\n- [ ] app task #p1\n\n---"),
+        "task hugs heading, template gap before divider")
+    expectTrue(templated.contains("### Notes\n- "), "filled notes section hugs its content")
+    let retemplated = VaultMarkdown.applying(entries: entries, doneDates: [:], to: templated)
+    expect(templated, retemplated, "template round-trip byte-stable")
+
+    // With nothing to write, the template's empty sections are untouched.
+    let pristine = VaultMarkdown.applying(entries: [], doneDates: [:], to: templateNote)
+    expect(pristine, templateNote, "empty pass preserves template")
+
+    // A divider glued to the section above is separated on rewrite.
+    let glued = VaultMarkdown.applying(entries: entries, doneDates: [:], to: "### Notes---\n")
+    expectTrue(glued.contains("### Notes\n"), "glued divider separated")
+
     // Parsing a hand-made note reads foreign entries (vault → app adoption).
     let (adopted, doneDates) = VaultMarkdown.entries(in: note)
     expect(adopted.count, 2, "hand note entry count")
@@ -446,6 +466,58 @@ func runNoteTimestampChecks() {
         "stampless renders bare")
 }
 
+func runDailyTemplateChecks() {
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+
+    // No config: nothing resolves, caller falls back to its skeleton.
+    expect(DailyTemplate.configuredPaths(root: dir), [] as [String], "no config no paths")
+    expect(DailyTemplate.text(root: dir), nil as String?, "no config no text")
+
+    // QuickAdd capture choice that creates from a template.
+    let templates = dir.appendingPathComponent("Templates", isDirectory: true)
+    try? FileManager.default.createDirectory(at: templates, withIntermediateDirectories: true)
+    try? "### Brief\n\n---\n### Tasks\n\n---\n### Notes\n".write(
+        to: templates.appendingPathComponent("Daily.md"), atomically: true, encoding: .utf8)
+    let quickAdd: [String: Any] = [
+        "choices": [
+            [
+                "name": "New note",
+                "createFileIfItDoesntExist": [
+                    "enabled": true,
+                    "template": "Templates/Daily.md",
+                ],
+            ]
+        ]
+    ]
+    let pluginDir = dir.appendingPathComponent(".obsidian/plugins/quickadd", isDirectory: true)
+    try? FileManager.default.createDirectory(at: pluginDir, withIntermediateDirectories: true)
+    let quickAddData = try! JSONSerialization.data(withJSONObject: quickAdd)
+    try? quickAddData.write(to: pluginDir.appendingPathComponent("data.json"))
+
+    expect(
+        DailyTemplate.configuredPaths(root: dir), ["Templates/Daily.md"] as [String],
+        "quickadd path resolved")
+    expect(DailyTemplate.text(root: dir)?.hasPrefix("### Brief"), true, "quickadd template read")
+
+    // Daily-notes core plugin config wins when both exist.
+    let obsidianDir = dir.appendingPathComponent(".obsidian", isDirectory: true)
+    try? FileManager.default.createDirectory(at: obsidianDir, withIntermediateDirectories: true)
+    try? "{\"template\":\"Templates/Core.md\"}".write(
+        to: obsidianDir.appendingPathComponent("daily-notes.json"), atomically: true, encoding: .utf8)
+    expect(
+        DailyTemplate.configuredPaths(root: dir).first, "Templates/Core.md",
+        "daily-notes config first")
+    // Falls through to QuickAdd's template when the first one is missing.
+    expect(DailyTemplate.text(root: dir)?.hasPrefix("### Brief"), true, "missing first falls through")
+
+    // Extension-less configured path resolves to the .md file.
+    try? "{\"template\":\"Templates/Daily\"}".write(
+        to: obsidianDir.appendingPathComponent("daily-notes.json"), atomically: true, encoding: .utf8)
+    expect(DailyTemplate.text(root: dir)?.hasPrefix("### Brief"), true, "extension added")
+}
+
 runEngineChecks()
 runTaskChecks()
 runNoteChecks()
@@ -453,6 +525,7 @@ runFormattingChecks()
 runVaultMarkdownChecks()
 runVaultSyncChecks()
 runNoteTimestampChecks()
+runDailyTemplateChecks()
 
 if failures == 0 {
     print("All checks passed.")

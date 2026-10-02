@@ -180,16 +180,23 @@ public enum VaultMarkdown {
             return joined(lines_out)
         }
 
-        let trailingBlanks = lines_out[headingIndex + 1..<end].reversed().prefix { $0.isEmpty }.count
-        let bodyEnd = end - trailingBlanks
-        let body = lines_out[(headingIndex + 1)..<bodyEnd]
-
-        // Trailing section blanks belong to the layout, not the body: keep
-        // them so notes edited by hand keep their breathing room.
+        // Blank lines between a heading and the next divider are the
+        // section's layout: content is replaced wholesale, the blank gap is
+        // rebuilt after it. A single trailing "" on the file's last section
+        // is the final newline, not a blank line, so it rides along outside
+        // the count. Gapless sections stay gapless.
+        let finalNewline = end == lines_out.count && lines_out.last == ""
+        let layoutEnd = finalNewline ? end - 1 : end
+        let blankCount = lines_out[(headingIndex + 1)..<layoutEnd].filter { $0.isEmpty }.count
         var updated = Array(lines_out[...headingIndex])
         updated.append(contentsOf: lines)
-        updated.append(contentsOf: body.isEmpty ? [] : [""])
-        updated.append(contentsOf: lines_out[end...])
+        updated.append(contentsOf: Array(repeating: "", count: blankCount))
+        let tail = Array(lines_out[layoutEnd...])
+        // A horizontal rule never glues onto the section above it.
+        if let first = tail.first, isStructural(first), !first.hasPrefix("#"), updated.last != "" {
+            updated.append("")
+        }
+        updated.append(contentsOf: tail)
         return joined(updated)
     }
 
